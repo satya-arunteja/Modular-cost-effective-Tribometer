@@ -39,3 +39,23 @@
 
 # debug information files
 *.dwo
+### --- Engineering Additions --- ###
+
+# SOLIDWORKS (temporary and backup files)
+~$*
+*.tmp
+*.err
+*.swp
+*.sldlfp
+
+# ANSYS & Simulation (keeps the repo light by ignoring large result files)
+*.log
+*.err
+*.bat
+*.out
+*_files/
+*.backup
+
+# Arduino/PlatformIO (if you use them later)
+.pio/
+.vscode/
