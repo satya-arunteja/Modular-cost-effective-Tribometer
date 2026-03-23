@@ -1,6 +1,14 @@
 # Modular-cost-effective-Tribometer
 Open-source design and development of a modular, cost-effective pin-on-disc tribometer, including mechanical design, structural validation, servo motor control, and experimental methodology using Arduino Mega and Raspberry Pi 5 with a supportive HMI/GUI.
 
+## 🕹️ Interactive HMI Simulation
+
+Try the interactive web-based simulation of our Pin-on-Disc Tribometer! This custom HMI walkthrough visually demonstrates the system setup, normal load application, disc rotation, and friction force measurement principles directly in your browser.
+
+👉 **[Launch Live HMI Simulator](https://satya-arunteja.github.io/Modular-cost-effective-Tribometer/)**
+
+---
+
 ## Project Overview
 
 This project focuses on the design and development of a modular, cost-effective pin-on-disc tribometer intended for academic and research laboratory use.  
@@ -40,5 +48,6 @@ The following aspects are under active evaluation and open for technical discuss
 - `/mechanical-design` – CAD models and drawings  
 - `/analysis` – Structural validation and simulation notes  
 - `/electronics` – Wiring diagrams and control hardware  
-- `/firmware` – Arduino control logic and Raspberry Pi (Python) code for GUI  
+- `/firmware` – Arduino control logic and Raspberry Pi (Python) code for GUI 
+- `/docs` – Web-based interactive HMI simulation files 
 - `/documentation` – Experimental methodology and design notes  
