@@ -1,0 +1,1350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pin-on-Disc Tribometer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@400;500;600&display=swap');
+
+  :root {
+    --bg:       #DCDBDB;
+    --bg2:      #C8C7C7;
+    --bg3:      #EBEBEB;
+    --panel:    #D0CFCF;
+    --panel2:   #E4E3E3;
+    --header:   #2B3A42;
+    --border:   #A8A6A6;
+    --border2:  #B8B6B6;
+    --text:     #1A2228;
+    --text2:    #3A4A54;
+    --dim:      #7A8A92;
+    --hmi-blue:   #1565C0;
+    --hmi-orange: #E65100;
+    --hmi-green:  #2E7D32;
+    --hmi-red:    #C62828;
+    --hmi-yellow: #F57F17;
+    --hmi-teal:   #00695C;
+    --cyan:   #1565C0;
+    --amber:  #E65100;
+    --green:  #2E7D32;
+    --red:    #C62828;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    font-family: 'Barlow', sans-serif;
+    color: var(--text);
+    overflow: hidden;
+    height: 100vh; width: 100vw;
+    display: flex; flex-direction: column;
+  }
+  body::before {
+    content:''; position:fixed; inset:0;
+    background-image: linear-gradient(rgba(100,100,100,0.1) 1px,transparent 1px), linear-gradient(90deg,rgba(100,100,100,0.1) 1px,transparent 1px);
+    background-size: 32px 32px; pointer-events:none; z-index:0;
+  }
+  header {
+    position:relative; z-index:10; padding:10px 24px;
+    display:flex; align-items:center; justify-content:space-between;
+    background:var(--header);
+    border-bottom:3px solid var(--hmi-blue);
+    box-shadow:0 2px 8px rgba(0,0,0,0.25);
+  }
+  .title-block { display:flex; flex-direction:column; }
+  .main-title {
+    font-family:'Barlow Condensed',sans-serif; font-size:1.15rem; font-weight:700;
+    color:#fff; letter-spacing:3px; text-transform:uppercase;
+  }
+  .sub-title {
+    font-family:'Share Tech Mono',monospace; font-size:0.62rem;
+    color:rgba(255,255,255,0.45); letter-spacing:3px; margin-top:2px;
+  }
+  .phase-indicator { display:flex; align-items:center; gap:8px; }
+  .phase-dot {
+    width:10px; height:10px; border-radius:50%;
+    background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.3);
+    transition:all 0.4s;
+  }
+  .phase-dot.active { background:var(--hmi-yellow); border-color:var(--hmi-yellow); box-shadow:0 0 8px rgba(245,127,23,0.7); }
+  .phase-dot.done   { background:#66BB6A; border-color:#66BB6A; }
+  .content { position:relative; z-index:5; flex:1; display:flex; flex-direction:row; overflow:hidden; }
+  .diagram-area {
+    position:relative; display:flex; align-items:center; justify-content:center;
+    padding:16px; flex:1; min-width:0; background:var(--bg3);
+  }
+  canvas#tribometer {
+    max-width:100%; max-height:100%;
+    border:1px solid var(--border); border-radius:3px;
+    box-shadow:inset 0 1px 4px rgba(0,0,0,0.12),0 2px 6px rgba(0,0,0,0.1);
+    background:#F0EFEF;
+    cursor:grab;
+  }
+  canvas#tribometer.panning { cursor:grabbing; }
+  /* Theme swatches */
+  .theme-swatches { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .swatch {
+    width:34px; height:22px; border-radius:3px; cursor:pointer;
+    border:2px solid transparent; transition:border-color 0.15s,transform 0.1s;
+    flex-shrink:0; position:relative;
+  }
+  .swatch:hover { transform:scale(1.08); }
+  .swatch.active { border-color:var(--hmi-blue) !important; box-shadow:0 0 0 1px var(--hmi-blue); }
+  .swatch-row { display:flex; align-items:center; gap:8px; margin-top:6px; }
+  .swatch-group-label { font-family:'Share Tech Mono',monospace; font-size:0.58rem; color:var(--dim); letter-spacing:1px; text-transform:uppercase; min-width:38px; }
+
+  .resize-handle {
+    width:7px; background:var(--border); cursor:col-resize; flex-shrink:0;
+    position:relative; z-index:20; display:flex; align-items:center; justify-content:center;
+    border-left:1px solid var(--border2); border-right:1px solid var(--border2);
+    transition:background 0.2s;
+  }
+  .resize-handle:hover,.resize-handle.dragging { background:var(--hmi-blue); }
+  .resize-handle::after { content:'⋮'; color:rgba(255,255,255,0.6); font-size:0.9rem; pointer-events:none; }
+  .right-panel {
+    width:340px; min-width:200px; max-width:560px;
+    border-left:1px solid var(--border); background:var(--bg);
+    display:flex; flex-direction:column; padding:12px; gap:10px;
+    overflow-y:auto; flex-shrink:0;
+  }
+  .panel-section {
+    background:var(--panel2); border:1px solid var(--border);
+    border-top:3px solid var(--hmi-blue); border-radius:3px;
+    padding:10px 12px 18px 12px; position:relative; overflow:hidden;
+    cursor:default; box-shadow:0 1px 3px rgba(0,0,0,0.1);
+    flex-shrink:0; min-height:48px; box-sizing:border-box;
+    transition:box-shadow 0.2s,border-color 0.2s;
+  }
+  .panel-section::before { display:none; }
+  .panel-section.highlight { border-top-color:var(--hmi-orange); }
+  .panel-section.dragging-panel { opacity:0.45; border-top-color:var(--hmi-orange); box-shadow:0 0 12px rgba(230,81,0,0.2); }
+  .panel-section.drag-over { border-color:var(--hmi-orange); border-top-color:var(--hmi-orange); }
+  .section-label {
+    font-family:'Barlow Condensed',sans-serif; font-size:0.7rem; font-weight:700;
+    color:var(--hmi-blue); letter-spacing:2px; margin-bottom:8px;
+    text-transform:uppercase; border-bottom:1px solid var(--border); padding-bottom:4px;
+  }
+  .explanation-text { font-size:0.88rem; line-height:1.55; color:var(--text2); }
+  .drag-handle {
+    position:absolute; top:6px; right:8px; font-size:0.85rem; color:var(--dim);
+    cursor:grab; line-height:1; padding:2px 4px; border-radius:2px;
+    transition:color 0.2s,background 0.2s; user-select:none;
+  }
+  .drag-handle:hover { color:var(--hmi-blue); background:rgba(21,101,192,0.08); }
+  .drag-handle:active { cursor:grabbing; }
+  .panel-resize-grip {
+    position:absolute; bottom:0; left:0; right:0; height:10px;
+    cursor:ns-resize; display:flex; align-items:center; justify-content:center;
+    z-index:10; border-top:1px solid transparent;
+    transition:border-color 0.2s,background 0.2s; border-radius:0 0 3px 3px;
+  }
+  .panel-resize-grip::after { content:'— — —'; font-size:0.4rem; letter-spacing:2px; color:var(--dim); pointer-events:none; transition:color 0.2s; }
+  .panel-resize-grip:hover,.panel-resize-grip.resizing { background:rgba(21,101,192,0.07); border-top-color:var(--hmi-blue); }
+  .panel-resize-grip:hover::after,.panel-resize-grip.resizing::after { color:var(--hmi-blue); }
+  .live-input-row { display:flex; align-items:center; gap:8px; margin-top:6px; }
+  .live-input-label { font-family:'Share Tech Mono',monospace; font-size:0.62rem; color:var(--dim); letter-spacing:1px; flex-shrink:0; width:68px; text-transform:uppercase; }
+  .live-input {
+    flex:1; background:#F5F4F4; border:1px solid var(--border);
+    border-bottom:2px solid var(--hmi-blue); border-radius:2px;
+    color:var(--hmi-blue); font-family:'Share Tech Mono',monospace; font-size:1rem;
+    padding:4px 8px; outline:none; width:80px; text-align:right;
+    transition:border-color 0.2s,box-shadow 0.2s;
+  }
+  .live-input:focus { border-bottom-color:var(--hmi-orange); box-shadow:0 2px 0 var(--hmi-orange); color:var(--hmi-orange); background:#fff; }
+  .live-input.cof-input { border-bottom-color:var(--hmi-teal); color:var(--hmi-teal); }
+  .live-input.cof-input:focus { border-bottom-color:var(--hmi-teal); color:var(--hmi-teal); }
+  .live-unit { font-family:'Share Tech Mono',monospace; font-size:0.62rem; color:var(--dim); flex-shrink:0; width:28px; }
+  .live-display { flex:1; text-align:right; font-family:'Share Tech Mono',monospace; font-size:1rem; color:var(--text); padding:4px 8px; background:#E8E7E7; border:1px solid var(--border); border-radius:2px; }
+  .live-display.derived { color:var(--hmi-red); font-weight:600; }
+  .force-diagram { display:flex; flex-direction:column; gap:8px; }
+  .force-bar-wrap { display:flex; align-items:center; gap:8px; }
+  .force-bar-label { font-family:'Share Tech Mono',monospace; font-size:0.65rem; color:var(--dim); width:28px; text-align:right; flex-shrink:0; }
+  .force-bar-track { flex:1; height:10px; background:#C0BFBF; border-radius:2px; overflow:hidden; border:1px solid var(--border); }
+  .force-bar-fill { height:100%; border-radius:2px; transition:width 0.3s ease; width:0%; }
+  .force-bar-fill.normal   { background:linear-gradient(90deg,#1565C0,#42A5F5); }
+  .force-bar-fill.friction { background:linear-gradient(90deg,#BF360C,#FF7043); }
+  .force-bar-fill.measured { background:linear-gradient(90deg,#1B5E20,#66BB6A); }
+  .formula-display {
+    font-family:'Share Tech Mono',monospace; font-size:0.8rem; color:var(--text2);
+    background:#E8E7E7; border:1px solid var(--border); border-left:3px solid var(--hmi-teal);
+    border-radius:2px; padding:10px 12px; text-align:center; letter-spacing:1px; line-height:1.7;
+  }
+  .controls { display:flex; flex-direction:column; gap:8px; }
+  .btn {
+    font-family:'Barlow Condensed',sans-serif; font-size:0.78rem; font-weight:700;
+    letter-spacing:2px; padding:10px 16px; border:none; border-radius:2px;
+    cursor:pointer; transition:all 0.15s; text-transform:uppercase;
+  }
+  .btn-primary { background:var(--hmi-blue); color:#fff; border-bottom:3px solid #0D47A1; }
+  .btn-primary:hover { background:#1976D2; transform:translateY(-1px); }
+  .btn-primary:active { transform:translateY(1px); border-bottom-width:1px; }
+  .btn-secondary { background:var(--panel); color:var(--text2); border:1px solid var(--border); border-bottom:2px solid var(--border2); }
+  .btn-secondary:hover { background:var(--bg2); }
+  .speed-control { display:flex; align-items:center; gap:10px; padding:4px 0; }
+  .speed-label { font-family:'Share Tech Mono',monospace; font-size:0.62rem; color:var(--dim); letter-spacing:2px; flex-shrink:0; }
+  input[type=range] { flex:1; -webkit-appearance:none; appearance:none; height:4px; background:var(--border); border-radius:2px; outline:none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:14px; height:14px; border-radius:2px; background:var(--hmi-blue); cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,0.3); }
+  #phase-label {
+    position:absolute; top:14px; left:50%; transform:translateX(-50%);
+    font-family:'Barlow Condensed',sans-serif; font-size:0.85rem; font-weight:700;
+    color:#fff; background:var(--hmi-blue); padding:4px 16px; border-radius:2px;
+    letter-spacing:3px; opacity:0; transition:opacity 0.5s; pointer-events:none;
+    white-space:nowrap; box-shadow:0 2px 8px rgba(0,0,0,0.2); z-index:10;
+  }
+  .lbl-toggle {
+    font-family:'Share Tech Mono',monospace; font-size:0.62rem; padding:3px 7px;
+    border:1px solid var(--border); border-radius:2px; background:var(--panel);
+    color:var(--dim); cursor:pointer; transition:all 0.15s; letter-spacing:1px;
+  }
+  .lbl-toggle.active { background:var(--hmi-blue); color:#fff; border-color:var(--hmi-blue); }
+  .lbl-toggle:hover { border-color:var(--hmi-blue); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-block">
+    <div class="main-title">PIN-ON-DISC TRIBOMETER</div>
+    <div class="sub-title">TRIBOLOGICAL MEASUREMENT SYSTEM · ASTM G99</div>
+  </div>
+  <div class="phase-indicator" id="phaseIndicator">
+    <div class="phase-dot active" id="dot0" title="Setup"></div>
+    <div class="phase-dot" id="dot1" title="Normal Load"></div>
+    <div class="phase-dot" id="dot2" title="Disc Rotation"></div>
+    <div class="phase-dot" id="dot3" title="Friction"></div>
+    <div class="phase-dot" id="dot4" title="Measurement"></div>
+  </div>
+</header>
+
+<div class="content">
+  <div class="diagram-area">
+    <div id="phase-label"></div>
+    <canvas id="tribometer" width="820" height="560"></canvas>
+  </div>
+
+  <div class="resize-handle" id="resizeHandle"></div>
+
+  <div class="right-panel" id="rightPanel">
+
+    <div class="panel-section" id="panelExplain" draggable="true">
+      <span class="drag-handle" title="Drag to reorder">⠿</span>
+      <div class="section-label">// CURRENT PHASE</div>
+      <div class="explanation-text" id="explainText">
+        The <strong style="color:var(--cyan)">Pin-on-Disc Tribometer</strong> measures friction between two surfaces.
+        A stationary pin contacts a rotating disc, and the frictional force is captured using a precision lever-arm system.
+        <br><br>Press <strong style="color:var(--amber)">START ANIMATION</strong> to begin.
+      </div>
+      <div class="panel-resize-grip"></div>
+    </div>
+
+    <div class="panel-section" id="panelInputs" draggable="true">
+      <span class="drag-handle" title="Drag to reorder">⠿</span>
+      <div class="section-label">// LIVE INPUTS &amp; READOUTS</div>
+
+      <div class="live-input-row">
+        <span class="live-input-label">NORMAL Fn</span>
+        <input class="live-input" id="inp-load" type="number" min="0" max="50" step="0.5" value="0" title="Edit Normal Force (N)">
+        <span class="live-unit">N</span>
+      </div>
+      <div class="live-input-row">
+        <span class="live-input-label">DISC RPM</span>
+        <input class="live-input" id="inp-rpm" type="number" min="0" max="600" step="10" value="0" title="Edit disc RPM">
+        <span class="live-unit">rpm</span>
+      </div>
+      <div class="live-input-row">
+        <span class="live-input-label">COF  μ</span>
+        <input class="live-input cof-input" id="inp-cof" type="number" min="0" max="2" step="0.01" value="" placeholder="auto" title="Enter COF to calculate Ff">
+        <span class="live-unit"></span>
+      </div>
+      <div class="live-input-row" style="margin-top:10px; border-top:1px solid rgba(0,212,255,0.1); padding-top:10px;">
+        <span class="live-input-label">FRICTION Ff</span>
+        <span class="live-display derived" id="disp-friction">0.00</span>
+        <span class="live-unit">N</span>
+      </div>
+      <div class="live-input-row">
+        <span class="live-input-label">CALC. COF</span>
+        <span class="live-display" id="disp-cof" style="color:var(--green)">---</span>
+        <span class="live-unit"></span>
+      </div>
+      <div class="panel-resize-grip"></div>
+    </div>
+
+    <div class="panel-section" id="panelBars" draggable="true">
+      <span class="drag-handle" title="Drag to reorder">⠿</span>
+      <div class="section-label">// FORCE BREAKDOWN</div>
+      <div class="force-diagram">
+        <div class="force-bar-wrap">
+          <span class="force-bar-label">Fn</span>
+          <div class="force-bar-track"><div class="force-bar-fill normal" id="bar-normal"></div></div>
+        </div>
+        <div class="force-bar-wrap">
+          <span class="force-bar-label">Ff</span>
+          <div class="force-bar-track"><div class="force-bar-fill friction" id="bar-friction"></div></div>
+        </div>
+        <div class="force-bar-wrap">
+          <span class="force-bar-label">Flc</span>
+          <div class="force-bar-track"><div class="force-bar-fill measured" id="bar-measured"></div></div>
+        </div>
+      </div>
+      <div class="panel-resize-grip"></div>
+    </div>
+
+    <div class="panel-section" id="panelFormula" draggable="true">
+      <span class="drag-handle" title="Drag to reorder">⠿</span>
+      <div class="section-label">// LEVER PRINCIPLE (1ST CLASS)</div>
+      <div class="formula-display" id="formulaDisplay">
+        Ff × L₁ = F<sub>lc</sub> × L₂<br><br>μ = Ff / Fn
+      </div>
+      <div class="panel-resize-grip"></div>
+    </div>
+
+    <div class="panel-section" id="panelControls" draggable="true">
+      <span class="drag-handle" title="Drag to reorder">⠿</span>
+      <div class="section-label">// CONTROLS</div>
+      <div class="controls">
+        <button class="btn btn-primary" id="btnStart" onclick="startAnimation()">▶ START ANIMATION</button>
+        <button class="btn btn-secondary" id="btnNext" onclick="nextPhase()" style="display:none">NEXT PHASE ›</button>
+        <button class="btn btn-secondary" onclick="resetAnimation()">↺ RESET</button>
+        <div class="speed-control">
+          <span class="speed-label">DISC SPEED</span>
+          <input type="range" id="speedSlider" min="0.2" max="3" step="0.1" value="1" oninput="updateSpeed(this.value)">
+        </div>
+      </div>
+      <div class="panel-resize-grip"></div>
+    </div>
+
+    <div class="panel-section" id="panelCanvas" draggable="true">
+      <span class="drag-handle" title="Drag to reorder">⠿</span>
+      <div class="section-label">// CANVAS APPEARANCE</div>
+
+      <div class="swatch-row">
+        <span class="swatch-group-label">DARK</span>
+        <div class="swatch active" id="sw-dark"    style="background:#0d1117" title="Dark" onclick="setCanvasBg('dark')"></div>
+        <div class="swatch"        id="sw-navy"    style="background:#0a1628" title="Navy" onclick="setCanvasBg('navy')"></div>
+        <div class="swatch"        id="sw-charcoal"style="background:#1c1c1e" title="Charcoal" onclick="setCanvasBg('charcoal')"></div>
+      </div>
+      <div class="swatch-row">
+        <span class="swatch-group-label">LIGHT</span>
+        <div class="swatch"        id="sw-light"   style="background:#F0EFEF" title="Light Grey" onclick="setCanvasBg('light')"></div>
+        <div class="swatch"        id="sw-white"   style="background:#FFFFFF;border:1px solid #ccc" title="White" onclick="setCanvasBg('white')"></div>
+        <div class="swatch"        id="sw-cream"   style="background:#FFF8F0" title="Cream" onclick="setCanvasBg('cream')"></div>
+      </div>
+      <div class="swatch-row">
+        <span class="swatch-group-label">COLOR</span>
+        <div class="swatch"        id="sw-teal"    style="background:#E0F2F1" title="Teal Tint" onclick="setCanvasBg('teal')"></div>
+        <div class="swatch"        id="sw-blue"    style="background:#E3F2FD" title="Blue Tint" onclick="setCanvasBg('blue')"></div>
+        <div class="swatch"        id="sw-green"   style="background:#E8F5E9" title="Green Tint" onclick="setCanvasBg('green')"></div>
+      </div>
+
+      <div style="margin-top:10px; border-top:1px solid var(--border); padding-top:8px;">
+        <span class="swatch-group-label" style="display:block; margin-bottom:6px; font-size:0.62rem; color:var(--hmi-blue);">LABELS VISIBLE</span>
+        <div style="display:flex; flex-wrap:wrap; gap:5px;" id="labelToggles">
+          <button class="lbl-toggle active" onclick="toggleLabel('pin')"       data-key="pin">PIN</button>
+          <button class="lbl-toggle active" onclick="toggleLabel('disc')"      data-key="disc">DISC</button>
+          <button class="lbl-toggle active" onclick="toggleLabel('fulcrum')"   data-key="fulcrum">FULCRUM</button>
+          <button class="lbl-toggle active" onclick="toggleLabel('loadcell')"  data-key="loadcell">LOAD CELL</button>
+          <button class="lbl-toggle active" onclick="toggleLabel('contact')"   data-key="contact">CONTACT</button>
+          <button class="lbl-toggle active" onclick="toggleLabel('weartrack')" data-key="weartrack">WEAR TRK</button>
+          <button class="lbl-toggle active" onclick="toggleLabel('fn')"        data-key="fn">Fn</button>
+          <button class="lbl-toggle active" onclick="toggleLabel('ff')"        data-key="ff">Ff</button>
+        </div>
+      </div>
+
+      <div style="margin-top:8px; border-top:1px solid var(--border); padding-top:8px; display:flex; align-items:center; gap:8px;">
+        <span class="swatch-group-label">PAN</span>
+        <span style="font-size:0.75rem; color:var(--text2);">Drag canvas to pan · </span>
+        <button class="btn btn-secondary" style="padding:4px 10px; font-size:0.65rem;" onclick="resetPan()">RESET PAN</button>
+      </div>
+      <div class="panel-resize-grip"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('tribometer');
+const ctx = canvas.getContext('2d');
+
+// --- Color palette (HMI light theme) ---
+const C = {
+  bg:        '#F0EFEF',
+  cyan:      '#1565C0',
+  amber:     '#E65100',
+  green:     '#2E7D32',
+  red:       '#C62828',
+  dim:       '#9AA8B0',
+  text:      '#1A2228',
+  steel:     '#607888',
+  darksteel: '#C8C7C7',
+  disc:      '#78909C',
+  discEdge:  '#455A64',
+  pin:       '#90A4AE',
+  weight:    '#546E7A',
+  arm:       '#607D8B',
+  loadcell:  '#37474F',
+  fulcrum:   '#1565C0',
+};
+
+// --- Canvas theme & pan state ---
+const BG_THEMES = {
+  dark:     { fill:'#0d1117', grid:'rgba(255,255,255,0.04)', labelBg:'rgba(13,17,23,0.85)', labelFg:'#c8e8f8', isDark:true  },
+  navy:     { fill:'#0a1628', grid:'rgba(0,180,255,0.06)',   labelBg:'rgba(10,22,40,0.85)',  labelFg:'#c8e8f8', isDark:true  },
+  charcoal: { fill:'#1c1c1e', grid:'rgba(255,255,255,0.04)', labelBg:'rgba(28,28,30,0.85)',  labelFg:'#e0e0e0', isDark:true  },
+  light:    { fill:'#F0EFEF', grid:'rgba(150,150,150,0.15)', labelBg:'rgba(220,219,219,0.9)',labelFg:'#1A2228', isDark:false },
+  white:    { fill:'#FFFFFF', grid:'rgba(180,180,180,0.18)', labelBg:'rgba(255,255,255,0.9)',labelFg:'#1A2228', isDark:false },
+  cream:    { fill:'#FFF8F0', grid:'rgba(180,160,130,0.15)', labelBg:'rgba(255,248,240,0.9)',labelFg:'#3A2010', isDark:false },
+  teal:     { fill:'#E0F2F1', grid:'rgba(0,105,92,0.12)',    labelBg:'rgba(224,242,241,0.9)',labelFg:'#004D40', isDark:false },
+  blue:     { fill:'#E3F2FD', grid:'rgba(21,101,192,0.12)',  labelBg:'rgba(227,242,253,0.9)',labelFg:'#0D47A1', isDark:false },
+  green:    { fill:'#E8F5E9', grid:'rgba(46,125,50,0.12)',   labelBg:'rgba(232,245,233,0.9)',labelFg:'#1B5E20', isDark:false },
+};
+let currentBg = 'dark';
+
+// Label visibility map
+const labelVis = { pin:true, disc:true, fulcrum:true, loadcell:true, contact:true, weartrack:true, fn:true, ff:true };
+
+// Pan state
+let panX = 0, panY = 0;
+let isPanning = false, panStartX = 0, panStartY = 0, panOriginX = 0, panOriginY = 0;
+
+function setCanvasBg(key) {
+  currentBg = key;
+  // Update swatch active state
+  document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById('sw-'+key);
+  if(el) el.classList.add('active');
+  // Update C palette for dark/light adaptation
+  const t = BG_THEMES[key];
+  C.bg = t.fill;
+  if(t.isDark) {
+    C.dim = '#607880'; C.text = '#c8e8f8';
+    C.cyan = '#00d4ff'; C.amber = '#ffb700'; C.green = '#00e676'; C.red = '#ff5252';
+    C.fulcrum = '#00d4ff'; C.discEdge = '#2060a0';
+    C.disc = '#1a3050';
+  } else {
+    C.dim = '#9AA8B0'; C.text = '#1A2228';
+    C.cyan = '#1565C0'; C.amber = '#E65100'; C.green = '#2E7D32'; C.red = '#C62828';
+    C.fulcrum = '#1565C0'; C.discEdge = '#455A64';
+    C.disc = '#78909C';
+  }
+}
+
+function toggleLabel(key) {
+  labelVis[key] = !labelVis[key];
+  const btn = document.querySelector(`[data-key="${key}"]`);
+  if(btn) btn.classList.toggle('active', labelVis[key]);
+}
+
+function resetPan() { panX = 0; panY = 0; }
+
+// Init pan on canvas
+function initPan() {
+  canvas.addEventListener('mousedown', e => {
+    // Only pan if not clicking a drag handle
+    isPanning = true;
+    panStartX = e.clientX; panStartY = e.clientY;
+    panOriginX = panX; panOriginY = panY;
+    canvas.classList.add('panning');
+  });
+  document.addEventListener('mousemove', e => {
+    if(!isPanning) return;
+    panX = panOriginX + (e.clientX - panStartX);
+    panY = panOriginY + (e.clientY - panStartY);
+  });
+  document.addEventListener('mouseup', () => {
+    isPanning = false;
+    canvas.classList.remove('panning');
+  });
+}
+
+
+let phase = -1;
+let running = false;
+let discAngle = 0;
+let discSpeed = 1;
+let armDeflection = 0;
+let targetDeflection = 0;
+let normalForce = 0;
+let targetNormal = 0;
+let frictionForce = 0;
+let targetFriction = 0;
+let showLabel = false;
+let labelAlpha = 0;
+let animId = null;
+let phaseTimer = 0;
+let autoAdvance = false;
+let particles = [];
+let wearTrack = [];
+let initialized = false;
+
+// Build wear track positions
+for(let i=0;i<360;i+=2) {
+  wearTrack.push({ angle: i * Math.PI/180, intensity: Math.random() });
+}
+
+// --- Layout constants (relative to canvas) ---
+function layout() {
+  const W = canvas.width, H = canvas.height;
+  const discR = Math.min(W,H) * 0.22;
+  const discCX = W * 0.26;
+  const discCY = H * 0.62;
+  const armLen = 138; // equal on both sides (1st class, L1=L2)
+  const fulcrumY = H * 0.27;
+  // Pin X = discCX so pin bottom sits on disc top, pin top = arm left end
+  const pinX = discCX;
+  const fulcrumX = pinX + armLen; // fulcrum is armLen to the right of pin
+  return {
+    W, H,
+    discCX, discCY, discR,
+    discThickness: 26,
+    pinR: 8,
+    // Pin spans from disc top surface up to arm level
+    pinContactY: discCY - discR * 0.28, // top of disc ellipse
+    pinTopY: fulcrumY,                   // pin top = arm left end height
+    pinX,
+    weightW: 44, weightH: 32,
+    fulcrumX, fulcrumY,
+    armLen1: armLen,
+    armLen2: armLen,
+    armH: 12,
+    lcW: 30, lcH: 58,
+  };
+}
+
+// --- Phases ---
+const phases = [
+  {
+    name: "SYSTEM SETUP",
+    explain: `This is the <strong style="color:var(--cyan)">Pin-on-Disc Tribometer</strong>. A hardened <strong style="color:var(--amber)">pin</strong> is held stationary, pressing against a <strong style="color:var(--cyan)">rotating disc</strong>. The disc is driven by a motor at constant RPM. The pivot <strong style="color:var(--green)">fulcrum</strong> acts as the lever's balance point.`,
+    action: () => { targetNormal = 0; targetFriction = 0; targetDeflection = 0; }
+  },
+  {
+    name: "APPLY NORMAL LOAD",
+    explain: `<strong style="color:var(--amber)">Dead weights</strong> are placed on top of the pin. This creates a precisely known <strong style="color:var(--cyan)">Normal Force (Fn)</strong> pushing the pin into the disc surface. This simulates the contact pressure between two mating surfaces.`,
+    action: () => { targetNormal = 20; }
+  },
+  {
+    name: "DISC ROTATION",
+    explain: `The disc begins to <strong style="color:var(--cyan)">rotate</strong> at a set RPM. The pin stays fixed in position while the disc surface slides underneath it. A circular <strong style="color:var(--amber)">wear track</strong> forms at the contact radius.`,
+    action: () => { running = true; }
+  },
+  {
+    name: "FRICTION FORCE ACTS",
+    explain: `The sliding disc drags the pin <strong style="color:var(--amber)">tangentially</strong> due to friction. This tangential force tries to move the lever arm. The arm is configured as a <strong style="color:var(--green)">1st Class Lever</strong> — the fulcrum sits between the pin and the load cell.`,
+    action: () => { targetFriction = 6.5; targetDeflection = 1; }
+  },
+  {
+    name: "LOAD CELL MEASURES",
+    explain: `The lever transmits the friction force to the <strong style="color:var(--green)">Load Cell</strong> at the opposite end. Using the lever ratio <strong style="color:var(--amber)">(L₁/L₂)</strong>, the true friction force is calculated. The <strong style="color:var(--cyan)">Coefficient of Friction μ = Ff / Fn</strong>.`,
+    action: () => { targetDeflection = 1.0; }
+  }
+];
+
+const phaseExplains = document.getElementById('explainText');
+
+function setPhase(p) {
+  phase = p;
+  if(p < 0 || p >= phases.length) return;
+  const ph = phases[p];
+
+  // Update dots
+  for(let i=0;i<phases.length;i++) {
+    const dot = document.getElementById('dot'+i);
+    dot.classList.remove('active','done');
+    if(i < p) dot.classList.add('done');
+    else if(i === p) dot.classList.add('active');
+  }
+
+  // Update explain
+  phaseExplains.innerHTML = ph.explain;
+
+  // Flash phase label
+  showPhaseLabel(ph.name);
+
+  // Run action
+  ph.action();
+
+  // Update buttons
+  document.getElementById('btnNext').style.display = (p < phases.length-1) ? 'block' : 'none';
+}
+
+function showPhaseLabel(text) {
+  const el = document.getElementById('phase-label');
+  el.textContent = text;
+  el.style.opacity = '1';
+  setTimeout(()=>{ el.style.opacity = '0'; }, 2500);
+}
+
+function startAnimation() {
+  document.getElementById('btnStart').style.display = 'none';
+  document.getElementById('btnNext').style.display = 'block';
+  setPhase(0);
+  if(!animId) loop();
+}
+
+function nextPhase() {
+  if(phase < phases.length-1) setPhase(phase+1);
+}
+
+function resetAnimation() {
+  phase = -1;
+  running = false;
+  discAngle = 0;
+  armDeflection = 0;
+  targetDeflection = 0;
+  normalForce = 0;
+  targetNormal = 0;
+  frictionForce = 0;
+  targetFriction = 0;
+  particles = [];
+  document.getElementById('btnStart').style.display = 'block';
+  document.getElementById('btnNext').style.display = 'none';
+  for(let i=0;i<5;i++){
+    document.getElementById('dot'+i).classList.remove('active','done');
+  }
+  document.getElementById('dot0').classList.add('active');
+  phaseExplains.innerHTML = `The <strong style="color:var(--cyan)">Pin-on-Disc Tribometer</strong> measures friction between two surfaces. Press <strong style="color:var(--amber)">START ANIMATION</strong> to begin the walkthrough.`;
+  updateReadouts();
+  document.getElementById('phase-label').style.opacity = '0';
+}
+
+function updateSpeed(v) {
+  discSpeed = parseFloat(v);
+}
+
+// --- Drawing Helpers ---
+function roundRect(ctx, x, y, w, h, r, fill, stroke) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y);
+  ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r);
+  ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h);
+  ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r);
+  ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+  if(fill){ ctx.fillStyle=fill; ctx.fill(); }
+  if(stroke){ ctx.strokeStyle=stroke; ctx.stroke(); }
+}
+
+function arrow(ctx, x1,y1,x2,y2, color, label, width=2) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = width;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 8;
+  ctx.beginPath();
+  ctx.moveTo(x1,y1);
+  ctx.lineTo(x2,y2);
+  ctx.stroke();
+  // Arrowhead
+  const angle = Math.atan2(y2-y1, x2-x1);
+  const hs = 10;
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - hs*Math.cos(angle-0.4), y2 - hs*Math.sin(angle-0.4));
+  ctx.lineTo(x2 - hs*Math.cos(angle+0.4), y2 - hs*Math.sin(angle+0.4));
+  ctx.closePath();
+  ctx.fill();
+  if(label) {
+    ctx.shadowBlur = 0;
+    ctx.font = 'bold 12px Rajdhani, sans-serif';
+    ctx.fillStyle = color;
+    const mx = (x1+x2)/2, my = (y1+y2)/2;
+    ctx.fillText(label, mx+8, my-6);
+  }
+  ctx.restore();
+}
+
+function drawLabel(ctx, text, x, y, color, bg=true, visKey=null) {
+  if(visKey && !labelVis[visKey]) return;
+  const t = BG_THEMES[currentBg];
+  const fgColor = color || t.labelFg;
+  ctx.save();
+  ctx.font = '600 12px Barlow, sans-serif';
+  const tw = ctx.measureText(text).width;
+  if(bg) {
+    roundRect(ctx, x-4, y-14, tw+10, 20, 2, t.labelBg, null);
+  }
+  ctx.fillStyle = fgColor;
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+// --- Main Draw ---
+function draw() {
+  const L = layout();
+  ctx.clearRect(0,0,L.W,L.H);
+
+  const t = BG_THEMES[currentBg];
+
+  // Background
+  ctx.fillStyle = t.fill;
+  ctx.fillRect(0,0,L.W,L.H);
+
+  // Grid
+  ctx.save();
+  ctx.strokeStyle = t.grid;
+  ctx.lineWidth = 0.5;
+  for(let x=0;x<L.W;x+=32){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,L.H); ctx.stroke(); }
+  for(let y=0;y<L.H;y+=32){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(L.W,y); ctx.stroke(); }
+  ctx.restore();
+
+  // Apply pan transform
+  ctx.save();
+  ctx.translate(panX, panY);
+
+  // Smooth lerp
+  armDeflection += (targetDeflection - armDeflection) * 0.04;
+  normalForce += (targetNormal - normalForce) * 0.03;
+  frictionForce += (targetFriction - frictionForce) * 0.03;
+
+  if(running) discAngle += 0.018 * discSpeed;
+
+  const deflectPx = armDeflection * 18; // pixels of arm deflection
+
+  // === DISC (3D ellipse effect) ===
+  drawDisc(L);
+
+  // === WEAR TRACK ===
+  if(phase >= 2) drawWearTrack(L);
+
+
+  // === ARM SYSTEM ===
+  drawArmSystem(L, deflectPx, L.pinX, L.pinContactY);
+
+  // === FORCE ARROWS ===
+  if(phase >= 1) drawForceArrows(L, deflectPx, L.pinX, L.pinContactY);
+
+  // === PARTICLES (wear) ===
+  if(phase >= 3) updateParticles(L, L.pinX, L.pinContactY);
+
+  // === DIMENSION LINES ===
+  if(phase >= 4) drawDimensions(L, deflectPx);
+
+  // Close pan transform
+  ctx.restore();
+
+  // === LEGEND (fixed, no pan) ===
+  drawLegend(L);
+
+  // Update readouts
+  updateReadouts();
+}
+
+function drawDisc(L) {
+  const {discCX, discCY, discR, discThickness} = L;
+
+  // Shadow
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,100,200,0.3)';
+  ctx.shadowBlur = 30;
+
+  // Bottom face (3D effect)
+  ctx.beginPath();
+  ctx.ellipse(discCX, discCY + discThickness, discR, discR*0.28, 0, 0, Math.PI*2);
+  ctx.fillStyle = '#546E7A';
+  ctx.fill();
+  ctx.strokeStyle = '#37474F';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Side of disc (cylinder)
+  const grad = ctx.createLinearGradient(discCX-discR, discCY, discCX+discR, discCY);
+  grad.addColorStop(0, '#455A64');
+  grad.addColorStop(0.4, '#78909C');
+  grad.addColorStop(0.6, '#78909C');
+  grad.addColorStop(1, '#455A64');
+  ctx.beginPath();
+  ctx.moveTo(discCX-discR, discCY);
+  ctx.lineTo(discCX-discR, discCY+discThickness);
+  ctx.ellipse(discCX, discCY+discThickness, discR, discR*0.28, 0, Math.PI, 0, true);
+  ctx.lineTo(discCX+discR, discCY);
+  ctx.ellipse(discCX, discCY, discR, discR*0.28, 0, 0, Math.PI);
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.strokeStyle = C.discEdge;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Top face
+  ctx.beginPath();
+  ctx.ellipse(discCX, discCY, discR, discR*0.28, 0, 0, Math.PI*2);
+  const topGrad = ctx.createRadialGradient(discCX, discCY, 0, discCX, discCY, discR);
+  topGrad.addColorStop(0, '#90A4AE');
+  topGrad.addColorStop(0.7, '#78909C');
+  topGrad.addColorStop(1, '#546E7A');
+  ctx.fillStyle = topGrad;
+  ctx.fill();
+  ctx.strokeStyle = running ? C.cyan : '#455A64';
+  ctx.lineWidth = 2;
+  if(running) { ctx.shadowColor = C.cyan; ctx.shadowBlur = 6; }
+  ctx.stroke();
+  ctx.restore();
+
+  // Rotation marks
+  if(running) {
+    for(let i=0; i<6; i++) {
+      const a = discAngle + i * Math.PI/3;
+      const r1 = discR*0.4, r2 = discR*0.85;
+      ctx.save();
+      ctx.strokeStyle = `rgba(21,101,192,${0.2 + 0.1*Math.sin(discAngle*3+i)})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(discCX + Math.cos(a)*r1, discCY + Math.sin(a)*discR*0.28*0.4);
+      ctx.lineTo(discCX + Math.cos(a)*r2, discCY + Math.sin(a)*discR*0.28*0.85);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // Center hub
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(discCX, discCY, 18, 18*0.28, 0, 0, Math.PI*2);
+  ctx.fillStyle = '#37474F';
+  ctx.fill();
+  ctx.strokeStyle = '#607D8B';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.restore();
+
+  // Rotation arrow indicator
+  if(running) {
+    ctx.save();
+    ctx.strokeStyle = C.cyan;
+    ctx.lineWidth = 2;
+    ctx.shadowColor = C.cyan;
+    ctx.shadowBlur = 4;
+    const aStart = discAngle + 0.3, aEnd = discAngle + Math.PI*1.5;
+    const rx = discR+18, ry = (discR+18)*0.28;
+    ctx.beginPath();
+    ctx.ellipse(discCX, discCY, rx, ry, 0, aStart, aEnd);
+    ctx.stroke();
+    const tipA = aEnd;
+    const tx = discCX + Math.cos(tipA)*rx;
+    const ty = discCY + Math.sin(tipA)*ry;
+    const tanA = Math.atan2(Math.cos(tipA)*ry, -Math.sin(tipA)*rx);
+    ctx.fillStyle = C.cyan;
+    ctx.beginPath();
+    ctx.moveTo(tx,ty);
+    ctx.lineTo(tx+10*Math.cos(tanA-0.4), ty+10*Math.sin(tanA-0.4));
+    ctx.lineTo(tx+10*Math.cos(tanA+0.4), ty+10*Math.sin(tanA+0.4));
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  drawLabel(ctx, 'ROTATING DISC', discCX - discR + 10, discCY + discThickness + 22, C.disc, true, 'disc');
+}
+
+function drawWearTrack(L) {
+  const {discCX, discCY, discR} = L;
+  const wearR = discR * 0.72;
+  // Elliptical wear track
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(discCX, discCY, wearR, wearR*0.28, 0, 0, Math.PI*2);
+  ctx.strokeStyle = `rgba(255,100,0,${0.15 + 0.05*Math.sin(Date.now()*0.003)})`;
+  ctx.lineWidth = 5;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(discCX, discCY, wearR, wearR*0.28, 0, 0, Math.PI*2);
+  ctx.strokeStyle = `rgba(255,183,0,${0.08})`;
+  ctx.lineWidth = 12;
+  ctx.stroke();
+  ctx.restore();
+  drawLabel(ctx, 'WEAR TRACK', discCX + wearR + 5, discCY, C.amber, true, 'weartrack');
+}
+
+function drawArmSystem(L, deflectPx, pinCX, pinCY) {
+  const {discCX, discCY, discR, pinR, pinX, pinTopY, pinContactY,
+         weightW, weightH, fulcrumX, fulcrumY, armLen1, armLen2, armH, lcW, lcH} = L;
+
+  const fx = fulcrumX;
+  const fy = fulcrumY;
+
+  // Arm rotation angle around fulcrum (1st class lever)
+  const armAngle = Math.atan2(deflectPx * 0.25, armLen1);
+
+  // Left end of arm (pin attachment) — rotates around fulcrum
+  const leftEndX = fx - armLen1 * Math.cos(armAngle);
+  const leftEndY = fy + armLen1 * Math.sin(armAngle);
+
+  // Right end of arm (load cell) — opposite rotation
+  const rightEndX = fx + armLen2 * Math.cos(armAngle);
+  const rightEndY = fy - armLen2 * Math.sin(armAngle);
+
+  // === DRAW ARM (one continuous bar, pivot at fulcrum) ===
+  ctx.save();
+  ctx.shadowColor = C.cyan;
+  ctx.shadowBlur = (phase >= 3) ? 10 : 3;
+
+  ctx.translate(fx, fy);
+  ctx.rotate(-armAngle);
+
+  // Left part
+  const lGrad = ctx.createLinearGradient(0, -armH/2, 0, armH/2);
+  lGrad.addColorStop(0, '#78909C');
+  lGrad.addColorStop(0.5, '#B0BEC5');
+  lGrad.addColorStop(1, '#546E7A');
+  roundRect(ctx, -armLen1, -armH/2, armLen1, armH, 3, lGrad, '#455A64');
+
+  // Right part
+  const rGrad = ctx.createLinearGradient(0, -armH/2, 0, armH/2);
+  rGrad.addColorStop(0, '#78909C');
+  rGrad.addColorStop(0.5, '#B0BEC5');
+  rGrad.addColorStop(1, '#546E7A');
+  roundRect(ctx, 0, -armH/2, armLen2, armH, 3, rGrad, '#455A64');
+
+  ctx.restore();
+
+  // === FULCRUM SUPPORT STAND ===
+  ctx.save();
+  // Vertical post from fulcrum down to base
+  ctx.strokeStyle = '#546E7A';
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.moveTo(fx, fy + armH/2);
+  ctx.lineTo(fx, fy + armH/2 + 70);
+  ctx.stroke();
+  // Base plate
+  roundRect(ctx, fx-44, fy + armH/2 + 70, 88, 10, 2, '#78909C', '#455A64');
+
+  // Fulcrum triangle
+  ctx.translate(fx, fy + armH/2);
+  const fh = 24;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(-fh*0.6, fh);
+  ctx.lineTo(fh*0.6, fh);
+  ctx.closePath();
+  ctx.fillStyle = C.cyan;
+  ctx.shadowColor = 'rgba(21,101,192,0.4)';
+  ctx.shadowBlur = 8;
+  ctx.fill();
+  ctx.strokeStyle = '#0D47A1';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.restore();
+
+  drawLabel(ctx, 'FULCRUM (PIVOT)', fx + 12, fy + armH/2 + 52, C.green, true, 'fulcrum');
+
+  // === PIN (vertical, bottom on disc, top on arm left end) ===
+  ctx.save();
+  // Pin runs from pinContactY (disc surface) up to leftEndY (arm left end)
+  const pinGrad = ctx.createLinearGradient(leftEndX - pinR, 0, leftEndX + pinR, 0);
+  pinGrad.addColorStop(0, '#78909C');
+  pinGrad.addColorStop(0.4, '#CFD8DC');
+  pinGrad.addColorStop(0.6, '#CFD8DC');
+  pinGrad.addColorStop(1, '#546E7A');
+  const pinHeight = pinContactY - leftEndY;
+  roundRect(ctx, leftEndX - pinR, leftEndY, pinR * 2, pinHeight, 4, pinGrad, '#80a8c8');
+  ctx.restore();
+
+  // Glowing joint circle at pin-top / arm-left junction
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(leftEndX, leftEndY, 9, 0, Math.PI * 2);
+  ctx.fillStyle = C.cyan;
+  ctx.shadowColor = C.cyan;
+  ctx.shadowBlur = 12;
+  ctx.fill();
+  ctx.restore();
+
+  drawLabel(ctx, 'PIN (stationary)', leftEndX + 14, pinContactY - (pinContactY - leftEndY)*0.5, C.steel, true, 'pin');
+
+  // === WEIGHTS stacked on top of pin/arm-left junction ===
+  if(phase >= 1) {
+    // Small black loading platform at the junction (weight seat)
+    const plateW = weightW + 14;
+    const plateH = 7;
+    const plateY = leftEndY - plateH - 2;
+    ctx.save();
+    const plateGrad = ctx.createLinearGradient(leftEndX - plateW/2, plateY, leftEndX + plateW/2, plateY + plateH);
+    plateGrad.addColorStop(0, '#1a1a1a');
+    plateGrad.addColorStop(0.4, '#3a3a3a');
+    plateGrad.addColorStop(1, '#111111');
+    roundRect(ctx, leftEndX - plateW/2, plateY, plateW, plateH, 2, plateGrad, '#000000');
+    // Sheen line on top of plate
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(leftEndX - plateW/2 + 3, plateY + 1, plateW - 6, 1);
+    ctx.restore();
+
+    const numWeights = Math.min(Math.floor(normalForce / 5) + 1, 3);
+    for(let i = 0; i < numWeights; i++) {
+      const wy = plateY - (weightH - 2) * i - (weightH - 2);
+      ctx.save();
+      const wGrad = ctx.createLinearGradient(leftEndX - weightW/2, wy, leftEndX + weightW/2, wy);
+      wGrad.addColorStop(0, '#546E7A');
+      wGrad.addColorStop(0.5, '#78909C');
+      wGrad.addColorStop(1, '#546E7A');
+      roundRect(ctx, leftEndX - weightW/2, wy, weightW, weightH - 4, 4, wGrad, '#455A64');
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 10px Share Tech Mono';
+      ctx.textAlign = 'center';
+      ctx.fillText('5N', leftEndX, wy + weightH/2 - 2);
+      ctx.restore();
+    }
+    if(normalForce > 2) {
+      const topWeight = plateY - (numWeights) * (weightH - 2);
+      drawLabel(ctx, `DEAD WEIGHT  Fn = ${normalForce.toFixed(1)}N`, leftEndX + weightW/2 + 6, topWeight + 10, C.amber);
+    }
+  }
+
+  // === LOAD CELL at right arm end ===
+  ctx.save();
+  ctx.translate(rightEndX, rightEndY - armH/2);
+  const lcGrad = ctx.createLinearGradient(-lcW/2, 0, lcW/2, lcH);
+  lcGrad.addColorStop(0, '#546E7A');
+  lcGrad.addColorStop(0.5, '#78909C');
+  lcGrad.addColorStop(1, '#37474F');
+  roundRect(ctx, -lcW/2, 0, lcW, lcH, 4, lcGrad, phase >= 4 ? C.green : '#455A64');
+  if(phase >= 4) {
+    ctx.shadowColor = C.green;
+    ctx.shadowBlur = 8;
+    roundRect(ctx, -lcW/2, 0, lcW, lcH, 4, null, C.green);
+  }
+  for(let s = 1; s < 4; s++) {
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(-lcW/2+3, s*lcH/4, lcW-6, 2);
+  }
+  if(phase >= 4) {
+    ctx.fillStyle = '#E8F5E9';
+    roundRect(ctx, -lcW/2+4, 4, lcW-8, 18, 2, '#E8F5E9', '#2E7D32');
+    ctx.fillStyle = C.green;
+    ctx.font = 'bold 8px Share Tech Mono';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${(frictionForce).toFixed(2)}N`, 0, 17);
+  }
+  ctx.restore();
+
+  drawLabel(ctx, 'LOAD CELL', rightEndX - lcW, rightEndY + lcH/2 + 4, C.green, true, 'loadcell');
+}
+
+function drawForceArrows(L, deflectPx, pinCX, pinCY) {
+  const {fulcrumY, armLen1, armLen2, fulcrumX, pinX, pinTopY, pinContactY} = L;
+  const armAngle = Math.atan2(deflectPx * 0.25, armLen1);
+  const leftEndX = fulcrumX - armLen1 * Math.cos(armAngle);
+  const leftEndY = fulcrumY + armLen1 * Math.sin(armAngle);
+
+  // Normal Force arrow (downward from weights into pin top)
+  if(normalForce > 0.5) {
+    arrow(ctx, leftEndX, leftEndY - 55, leftEndX, leftEndY - 4, C.amber, '', 3);
+    drawLabel(ctx, `Fn = ${normalForce.toFixed(1)} N`, leftEndX + 8, leftEndY - 30, C.amber);
+  }
+
+  // Friction force arrow (tangential, horizontal, acts at disc contact)
+  if(phase >= 3 && frictionForce > 0.2) {
+    const fflen = Math.min(60, frictionForce * 6);
+    arrow(ctx, pinCX, pinCY, pinCX + fflen, pinCY, C.red, '', 3);
+    drawLabel(ctx, `Ff = ${frictionForce.toFixed(2)} N`, pinCX + fflen + 4, pinCY - 6, C.red);
+  }
+
+  // L1 / L2 dimension brackets
+  if(phase >= 4) {
+    const fy = fulcrumY;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0,212,255,0.5)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4,3]);
+    ctx.beginPath();
+    ctx.moveTo(fulcrumX - armLen1, fy - 24);
+    ctx.lineTo(fulcrumX, fy - 24);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    arrow(ctx, fulcrumX - armLen1, fy-24, fulcrumX - armLen1 + 14, fy-24, C.cyan, '', 1.5);
+    arrow(ctx, fulcrumX, fy-24, fulcrumX - 14, fy-24, C.cyan, '', 1.5);
+    drawLabel(ctx, 'L₁', fulcrumX - armLen1/2 - 8, fy - 28, C.cyan);
+
+    ctx.strokeStyle = 'rgba(0,255,136,0.5)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4,3]);
+    ctx.beginPath();
+    ctx.moveTo(fulcrumX, fy - 24);
+    ctx.lineTo(fulcrumX + armLen2, fy - 24);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    arrow(ctx, fulcrumX, fy-24, fulcrumX + 14, fy-24, C.green, '', 1.5);
+    arrow(ctx, fulcrumX + armLen2, fy-24, fulcrumX + armLen2 - 14, fy-24, C.green, '', 1.5);
+    drawLabel(ctx, 'L₂', fulcrumX + armLen2/2 - 6, fy - 28, C.green);
+    ctx.restore();
+  }
+
+  // Contact point glow
+  if(phase >= 2) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(pinCX, pinCY, 7, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(255,180,0,${0.4 + 0.2*Math.sin(Date.now()*0.01)})`;
+    ctx.shadowColor = C.amber;
+    ctx.shadowBlur = 12;
+    ctx.fill();
+    ctx.restore();
+    drawLabel(ctx, 'CONTACT POINT', pinCX + 10, pinCY + 18, C.amber, true, 'contact');
+  }
+}
+
+function updateParticles(L, pinCX, pinCY) {
+  // Spawn wear particles
+  if(running && Math.random() < 0.3) {
+    particles.push({
+      x: pinCX, y: pinCY,
+      vx: (Math.random()-0.3) * 2 * discSpeed,
+      vy: (Math.random()-0.8) * 1.5,
+      life: 1, size: Math.random()*2+1,
+      color: Math.random()<0.5 ? C.amber : '#ff6020'
+    });
+  }
+  ctx.save();
+  particles = particles.filter(p => p.life > 0);
+  for(let p of particles) {
+    p.x += p.vx; p.y += p.vy; p.vy += 0.05; p.life -= 0.04;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, Math.max(0, p.size * p.life), 0, Math.PI*2);
+    ctx.fillStyle = p.color.replace(')', `,${p.life})`).replace('rgb','rgba');
+    ctx.shadowColor = p.color;
+    ctx.shadowBlur = 5;
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawDimensions(L, deflectPx) {}
+
+function drawLegend(L) {
+  const items = [
+    { color: C.amber, label: 'Normal Force (Fn)' },
+    { color: C.red,   label: 'Friction Force (Ff)' },
+    { color: C.green, label: 'Load Cell Reading' },
+    { color: C.cyan,  label: 'System Components' },
+  ];
+  const lx = 18, ly = L.H - 16 - items.length * 22;
+  ctx.save();
+  ctx.globalAlpha = 0.9;
+  roundRect(ctx, lx-6, ly-18, 200, items.length*22+22, 3, 'rgba(220,219,219,0.95)', 'rgba(168,166,166,0.8)');
+  ctx.globalAlpha = 1;
+  ctx.font = '600 11px Barlow, sans-serif';
+  for(let i=0;i<items.length;i++){
+    ctx.fillStyle = items[i].color;
+    ctx.fillRect(lx, ly+i*22-6, 14, 10);
+    ctx.fillStyle = '#1A2228';
+    ctx.fillText(items[i].label, lx+20, ly+i*22+4);
+  }
+  ctx.restore();
+}
+
+// --- Live Inputs ---
+let userCOF = null; // null = auto-calc from animation; set when user types
+
+function initLiveInputs() {
+  const inpLoad = document.getElementById('inp-load');
+  const inpRpm  = document.getElementById('inp-rpm');
+  const inpCof  = document.getElementById('inp-cof');
+
+  inpLoad.addEventListener('input', () => {
+    const v = parseFloat(inpLoad.value);
+    if (isNaN(v) || v < 0) return;
+    targetNormal = v;
+    // If user has set a COF, update friction target too
+    if (userCOF !== null) targetFriction = userCOF * v;
+    // Auto-start animation if not yet started
+    if (phase < 0) { startAnimation(); }
+    if (phase < 1) setPhase(1);
+  });
+
+  inpRpm.addEventListener('input', () => {
+    const v = parseFloat(inpRpm.value);
+    if (isNaN(v) || v < 0) return;
+    discSpeed = Math.max(0.01, v / 200);
+    document.getElementById('speedSlider').value = discSpeed;
+    if (v > 0) {
+      running = true;
+      if (phase < 2) setPhase(2);
+    } else {
+      running = false;
+    }
+  });
+
+  inpCof.addEventListener('input', () => {
+    const v = parseFloat(inpCof.value);
+    if (isNaN(v) || v < 0) {
+      userCOF = null;
+      return;
+    }
+    userCOF = v;
+    // Drive friction from COF × current normal force
+    targetFriction = userCOF * normalForce;
+    targetDeflection = Math.min(2.5, userCOF * 1.5);
+    if (phase < 3) setPhase(3);
+  });
+}
+
+// --- Readouts ---
+function updateReadouts() {
+  // Sync input fields only if not focused (don't fight the user typing)
+  const inpLoad = document.getElementById('inp-load');
+  const inpRpm  = document.getElementById('inp-rpm');
+  if (document.activeElement !== inpLoad)
+    inpLoad.value = normalForce.toFixed(1);
+  if (document.activeElement !== inpRpm)
+    inpRpm.value  = running ? Math.round(discSpeed * 200) : 0;
+
+  // Friction and COF displays
+  document.getElementById('disp-friction').textContent = frictionForce.toFixed(3);
+  const cof = (normalForce > 0.5) ? (frictionForce / normalForce) : null;
+  document.getElementById('disp-cof').textContent = cof !== null ? cof.toFixed(4) : '---';
+
+  // Force bars (max scale: Fn=50N, Ff=15N)
+  document.getElementById('bar-normal').style.width   = Math.min(100, normalForce  / 50 * 100) + '%';
+  document.getElementById('bar-friction').style.width = Math.min(100, frictionForce / 15 * 100) + '%';
+  document.getElementById('bar-measured').style.width = Math.min(100, frictionForce / 15 * 100) + '%';
+
+  // Formula panel
+  if (phase >= 4 && cof !== null) {
+    document.getElementById('formulaDisplay').innerHTML =
+      `Ff × L₁ = F<sub>lc</sub> × L₂<br><br>` +
+      `μ = ${frictionForce.toFixed(3)} / ${normalForce.toFixed(1)} = <strong style="color:var(--cyan)">${cof.toFixed(4)}</strong>`;
+  }
+}
+
+// --- Drag-to-Reorder Panels ---
+function initDragPanels() {
+  const panel = document.getElementById('rightPanel');
+  let dragSrc = null;
+
+  function getSections() {
+    return [...panel.querySelectorAll('.panel-section')];
+  }
+
+  getSections().forEach(sec => {
+    const handle = sec.querySelector('.drag-handle');
+
+    // Only start drag when grabbing the handle
+    handle.addEventListener('mousedown', () => { sec.setAttribute('draggable', 'true'); });
+    document.addEventListener('mouseup', () => { sec.setAttribute('draggable', 'false'); });
+
+    sec.addEventListener('dragstart', e => {
+      dragSrc = sec;
+      sec.classList.add('dragging-panel');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    sec.addEventListener('dragend', () => {
+      dragSrc = null;
+      getSections().forEach(s => s.classList.remove('dragging-panel', 'drag-over'));
+    });
+
+    sec.addEventListener('dragover', e => {
+      e.preventDefault();
+      if (sec !== dragSrc) {
+        getSections().forEach(s => s.classList.remove('drag-over'));
+        sec.classList.add('drag-over');
+      }
+    });
+
+    sec.addEventListener('dragleave', () => sec.classList.remove('drag-over'));
+
+    sec.addEventListener('drop', e => {
+      e.preventDefault();
+      if (dragSrc && dragSrc !== sec) {
+        // Insert dragSrc before or after sec depending on mouse Y position
+        const rect = sec.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (e.clientY < midY) {
+          panel.insertBefore(dragSrc, sec);
+        } else {
+          panel.insertBefore(dragSrc, sec.nextSibling);
+        }
+      }
+      getSections().forEach(s => s.classList.remove('drag-over', 'dragging-panel'));
+    });
+  });
+}
+
+// --- Vertical Resize for each Panel Section ---
+function initPanelResize() {
+  document.querySelectorAll('.panel-resize-grip').forEach(grip => {
+    const sec = grip.closest('.panel-section');
+    let active = false, startY = 0, startH = 0;
+
+    grip.addEventListener('mousedown', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      active = true;
+      startY = e.clientY;
+      startH = sec.offsetHeight;
+      grip.classList.add('resizing');
+      document.body.style.cursor = 'ns-resize';
+      document.body.style.userSelect = 'none';
+      // Prevent drag-to-reorder from firing while resizing
+      sec.setAttribute('draggable', 'false');
+    });
+
+    document.addEventListener('mousemove', e => {
+      if (!active) return;
+      const delta = e.clientY - startY;
+      const newH = Math.max(44, startH + delta);
+      sec.style.height = newH + 'px';
+      sec.style.overflow = 'hidden';
+    });
+
+    document.addEventListener('mouseup', e => {
+      if (!active) return;
+      active = false;
+      grip.classList.remove('resizing');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      // Re-enable draggable after a tick so the mouseup doesn't trigger drag
+      setTimeout(() => sec.setAttribute('draggable', 'true'), 50);
+    });
+  });
+}
+
+// --- Loop ---
+function loop() {
+  draw();
+  animId = requestAnimationFrame(loop);
+}
+
+// Start loop always (for initial static view)
+loop();
+initLiveInputs();
+initDragPanels();
+initPanelResize();
+
+// --- Left/Right Column Resize (middle divider) ---
+(function() {
+  const handle = document.getElementById('resizeHandle');
+  const panel  = document.getElementById('rightPanel');
+  let dragging = false, startX = 0, startW = 0;
+
+  handle.addEventListener('mousedown', e => {
+    e.preventDefault();
+    dragging = true;
+    startX = e.clientX;
+    startW = panel.offsetWidth;
+    handle.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const delta = startX - e.clientX;
+    const newW = Math.min(580, Math.max(180, startW + delta));
+    panel.style.width = newW + 'px';
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  });
+})();
+</script>
+</body>
+</html>
